@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RevenueStreamStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+model RevenueStream {
+  id          String               @id @default(cuid())
+  name        String
+  description String?
+  status      RevenueStreamStatus  @default(ACTIVE)
+  entries     RevenueEntry[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([status])
+}
+
+model RevenueEntry {
+  id             String        @id @default(cuid())
+  streamId       String
+  stream         RevenueStream @relation(fields: [streamId], references: [id], onDelete: Restrict)
+  amount         Decimal       @db.Decimal(19, 4)
+  currency       String        @db.Char(3)
+  occurredAt     DateTime
+  externalRef    String?
+  createdAt      DateTime      @default(now())
+
+  @@unique([streamId, externalRef])
+  @@index([streamId, occurredAt])
+}
