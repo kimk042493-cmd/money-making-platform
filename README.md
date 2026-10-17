@@ -3,7 +3,9 @@ Legitimate online monetization platform with multiple revenue streams.
 
 ## Performance improvement opportunities
 
-1. Memoize repeated expensive lookups and calculations. This is the highest-impact, lowest-effort change and is implemented in `performance/cache.py`.
+The current app is a small arithmetic starter with no database, API, or UI layer. Items 2–10 are roadmap candidates for when those parts of the platform exist, not measured bottlenecks in the current code.
+
+1. Preserve hot memoized results under cache pressure with least-recently-used (LRU) eviction instead of flushing the entire cache. Implemented in `performance/cache.py`.
 2. Batch database queries and API calls instead of issuing one request per user action.
 3. Add targeted indexes on high-cardinality filters and join columns to reduce query latency.
 4. Replace N+1 database patterns with eager loading or aggregated queries.
@@ -16,4 +18,4 @@ Legitimate online monetization platform with multiple revenue streams.
 
 ## Recommended first action
 
-Start with memoization for repeated read-heavy operations. It produces immediate savings with minimal code churn and no architecture risk.
+Use the bounded LRU memoization helper for repeated, expensive, deterministic operations; avoid caching cheap arithmetic where cache overhead may exceed the work saved.
