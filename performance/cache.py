@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
 from typing import Any, ParamSpec, TypeVar
@@ -10,14 +11,12 @@ R = TypeVar("R")
 
 
 def memoize(max_size: int = 256) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    """Cache results for pure, repeated function calls.
-
-    This is the highest-impact, lowest-effort change for any read-heavy workflow:
-    it removes redundant computation without changing call semantics.
-    """
+    """Cache results for pure, repeated function calls with LRU eviction."""
+    if max_size < 1:
+        raise ValueError("max_size must be at least 1")
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
-        cache: dict[tuple[Any, ...], R] = {}
+        cache: OrderedDict[tuple[Any, ...], R] = OrderedDict()
         lock = threading.RLock()
 
         @wraps(func)
@@ -25,16 +24,22 @@ def memoize(max_size: int = 256) -> Callable[[Callable[P, R]], Callable[P, R]]:
             key = (args, tuple(sorted(kwargs.items())))
             with lock:
                 if key in cache:
+                    cache.move_to_end(key)
                     return cache[key]
 
             value = func(*args, **kwargs)
             with lock:
-                if len(cache) >= max_size:
-                    cache.clear()
+                if key not in cache and len(cache) >= max_size:
+                    cache.popitem(last=False)
                 cache[key] = value
+                cache.move_to_end(key)
             return value
 
-        wrapper.clear = lambda: cache.clear()  # type: ignore[attr-defined]
+        def clear() -> None:
+            with lock:
+                cache.clear()
+
+        wrapper.clear = clear  # type: ignore[attr-defined]
         return wrapper
 
     return decorator

@@ -32,6 +32,28 @@ class MemoizeTests(unittest.TestCase):
         self.assertEqual(compute(3), 30)
         self.assertGreater(calls, 2)
 
+    def test_memoize_evicts_least_recently_used_entry(self):
+        calls = 0
+
+        @memoize(max_size=2)
+        def compute(value: int) -> int:
+            nonlocal calls
+            calls += 1
+            return value * 10
+
+        compute(1)
+        compute(2)
+        compute(1)
+        compute(3)
+        compute(1)
+        self.assertEqual(calls, 3)
+        compute(2)
+        self.assertEqual(calls, 4)
+
+    def test_memoize_requires_positive_max_size(self):
+        with self.assertRaises(ValueError):
+            memoize(max_size=0)
+
 
 if __name__ == "__main__":
     unittest.main()
