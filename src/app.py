@@ -9,5 +9,5 @@ def multiply(a, b):
 
 
 if __name__ == "__main__":
-    print(\"Example: 2 + 3 =\", add(2, 3))
-    print(\"Example: 2 * 3 =\", multiply(2, 3))
+    print("Example: 2 + 3 =", add(2, 3))
+    print("Example: 2 * 3 =", multiply(2, 3))
