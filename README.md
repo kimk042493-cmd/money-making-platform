@@ -19,3 +19,30 @@ The current app is a small arithmetic starter with no database, API, or UI layer
 ## Recommended first action
 
 Use the bounded LRU memoization helper for repeated, expensive, deterministic operations; avoid caching cheap arithmetic where cache overhead may exceed the work saved.
+
+## Google Sheets export
+
+Every calculation is recorded to a Google Sheet so there is a permanent history
+of the math performed. `src/calculator.calculate()` runs the operation and then
+appends a row (timestamp, operation, operands, result) through
+`src/sheets.record_result()`.
+
+Configure it with two environment variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `GOOGLE_SHEET_ID` | The id of the target spreadsheet (from its URL). |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | The service-account key, as raw JSON. A key file path via `GOOGLE_SERVICE_ACCOUNT_FILE` also works. |
+
+Setup:
+
+1. Create a Google Cloud service account and enable the Google Sheets API, then
+   download a JSON key.
+2. Create (or pick) a spreadsheet and share it with the service account's
+   `client_email` as an **Editor**.
+3. Provide the two variables above. `src/sheets.py` writes a header row on the
+   first record.
+
+When the variables are absent the recorder is a no-op, so calculations keep
+working without credentials. A failed export is logged and never breaks a
+calculation.
