@@ -1,21 +1,30 @@
-# money-making-platform
-Legitimate online monetization platform with multiple revenue streams.
+# Northstar Business Operations Workspace
 
-## Performance improvement opportunities
+A local-first operations workspace for running a portfolio of small businesses. Track prospects through a simple sales pipeline, turn follow-ups into dated tasks, and record income and expenses to review cash flow. It runs on Python's standard library and stores data in a local SQLite database.
 
-The current app is a small arithmetic starter with no database, API, or UI layer. Items 2–10 are roadmap candidates for when those parts of the platform exist, not measured bottlenecks in the current code.
+## Operating workflows
 
-1. Preserve hot memoized results under cache pressure with least-recently-used (LRU) eviction instead of flushing the entire cache. Implemented in `performance/cache.py`.
-2. Batch database queries and API calls instead of issuing one request per user action.
-3. Add targeted indexes on high-cardinality filters and join columns to reduce query latency.
-4. Replace N+1 database patterns with eager loading or aggregated queries.
-5. Move non-critical work to background jobs and queues so the request path stays fast.
-6. Use CDN caching and edge compression for static assets, media, and API responses.
-7. Compress and prune large payloads before sending them over the network.
-8. Implement lazy loading for large lists, galleries, and dashboards to defer unnecessary rendering.
-9. Simplify hot loops by reusing objects, avoiding repeated serialization, and reducing allocations.
-10. Add read-through caching and TTL policies for high-traffic metadata and configuration endpoints.
+- **Organize the portfolio:** create businesses and keep their operating status current.
+- **Work the sales pipeline:** record prospects and estimated deal values; move each opportunity through new, contacted, proposal, won, or lost. Open pipeline excludes closed won/lost opportunities.
+- **Keep execution moving:** write the next action as a dated task and mark it complete when done.
+- **Review cash flow:** record dated income and expenses and see portfolio totals alongside the open pipeline and open task count.
+- **Keep the records local:** business, lead, task, and transaction records persist in `data/businesses.sqlite3`.
 
-## Recommended first action
+## Run on Windows
 
-Use the bounded LRU memoization helper for repeated, expensive, deterministic operations; avoid caching cheap arithmetic where cache overhead may exceed the work saved.
+1. Double-click `scripts\setup-dev.cmd` once. It creates the isolated `.venv` and runs the tests.
+2. Double-click `start-app.cmd` in the project folder to start the local app and open it in your browser. You can also double-click `scripts\run-app.cmd`.
+3. Use `http://127.0.0.1:8000` if the browser does not open automatically.
+4. Close the command window to stop the app.
+
+To run the tests later, double-click `scripts\test.cmd`.
+
+The app binds to `127.0.0.1` and is intended for use on the same computer only. It does not have accounts, multi-user access, cloud sync, customer communications, payment processing, invoicing, tax/accounting integrations, automatic backups, or production deployment configuration. The open pipeline is a planning estimate, not guaranteed revenue. Cash-flow totals are not accounting, tax, or financial advice. This is an operations MVP, not a production-ready finance or customer-record system; do not rely on it as the only record system for a real business.
+
+## Isolated development environment
+
+The project uses a repository-local Python virtual environment, separate from the system Python installation. It requires Python 3.10 or newer and installs no third-party packages. `.venv` and the local SQLite database are excluded from version control.
+
+## Project tests
+
+The test suite covers business, lead, task, and transaction workflows; financial and pipeline totals; validation; database cascades; HTML escaping; and dashboard rendering.
