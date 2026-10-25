@@ -17,6 +17,32 @@ class MemoizeTests(unittest.TestCase):
         self.assertEqual(compute_total(3, scale=2), 6)
         self.assertEqual(calls, 1)
 
+    def test_memoize_uses_same_entry_when_keyword_order_differs(self):
+        calls = 0
+
+        @memoize()
+        def compute_total(*, subtotal: int, tax: int) -> int:
+            nonlocal calls
+            calls += 1
+            return subtotal + tax
+
+        self.assertEqual(compute_total(subtotal=10, tax=2), 12)
+        self.assertEqual(compute_total(tax=2, subtotal=10), 12)
+        self.assertEqual(calls, 1)
+
+    def test_memoize_caches_none_results(self):
+        calls = 0
+
+        @memoize()
+        def compute(value: int) -> None:
+            nonlocal calls
+            calls += 1
+            return None
+
+        self.assertIsNone(compute(1))
+        self.assertIsNone(compute(1))
+        self.assertEqual(calls, 1)
+
     def test_memoize_clears_when_cache_is_full(self):
         calls = 0
 
@@ -50,9 +76,42 @@ class MemoizeTests(unittest.TestCase):
         compute(2)
         self.assertEqual(calls, 4)
 
+    def test_memoize_clear_forces_recomputation(self):
+        calls = 0
+
+        @memoize()
+        def compute(value: int) -> int:
+            nonlocal calls
+            calls += 1
+            return value * 10
+
+        self.assertEqual(compute(2), 20)
+        compute.clear()
+        self.assertEqual(compute(2), 20)
+        self.assertEqual(calls, 2)
+
+    def test_memoize_does_not_cache_exceptions(self):
+        calls = 0
+
+        @memoize()
+        def compute(value: int) -> int:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("temporary failure")
+            return value * 10
+
+        with self.assertRaisesRegex(RuntimeError, "temporary failure"):
+            compute(2)
+
+        self.assertEqual(compute(2), 20)
+        self.assertEqual(calls, 2)
+
     def test_memoize_requires_positive_max_size(self):
-        with self.assertRaises(ValueError):
-            memoize(max_size=0)
+        for max_size in (0, -1):
+            with self.subTest(max_size=max_size):
+                with self.assertRaises(ValueError):
+                    memoize(max_size=max_size)
 
 
 if __name__ == "__main__":
