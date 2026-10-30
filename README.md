@@ -1,21 +1,34 @@
-# money-making-platform
-Legitimate online monetization platform with multiple revenue streams.
+# Northstar Business Operations Workspace
 
-## Performance improvement opportunities
+Northstar is a local-first workspace for operating a portfolio of small businesses. It provides a dashboard for business status, sales prospects, follow-up tasks, and recorded income and expenses. Records persist in a local SQLite database.
 
-The current app is a small arithmetic starter with no database, API, or UI layer. Items 2–10 are roadmap candidates for when those parts of the platform exist, not measured bottlenecks in the current code.
+## Run the app
 
-1. Preserve hot memoized results under cache pressure with least-recently-used (LRU) eviction instead of flushing the entire cache. Implemented in `performance/cache.py`.
-2. Batch database queries and API calls instead of issuing one request per user action.
-3. Add targeted indexes on high-cardinality filters and join columns to reduce query latency.
-4. Replace N+1 database patterns with eager loading or aggregated queries.
-5. Move non-critical work to background jobs and queues so the request path stays fast.
-6. Use CDN caching and edge compression for static assets, media, and API responses.
-7. Compress and prune large payloads before sending them over the network.
-8. Implement lazy loading for large lists, galleries, and dashboards to defer unnecessary rendering.
-9. Simplify hot loops by reusing objects, avoiding repeated serialization, and reducing allocations.
-10. Add read-through caching and TTL policies for high-traffic metadata and configuration endpoints.
+Requires Python 3.10 or newer. No third-party packages are required.
 
-## Recommended first action
+```powershell
+python -m src.app
+```
 
-Use the bounded LRU memoization helper for repeated, expensive, deterministic operations; avoid caching cheap arithmetic where cache overhead may exceed the work saved.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Press `Ctrl+C` in the terminal to stop the server. On Windows, `start-app.cmd` can be double-clicked to launch the same command.
+
+The database is created at `data/businesses.sqlite3` the first time the app runs. Override its location with `NORTHSTAR_DB_PATH`; set `NORTHSTAR_PORT` to choose another local port.
+
+## Workflows
+
+- **Manage a portfolio:** create a business, update its details and status, and remove businesses you no longer track.
+- **Track sales:** add prospects with estimated values, record contact details, and move leads through new, contacted, proposal, won, or lost. The open pipeline excludes won and lost leads.
+- **Plan follow-ups:** add dated tasks, mark tasks complete, reopen them, or remove them.
+- **Record cash flow:** log dated income and expenses. The dashboard summarizes recorded totals and net cash flow.
+
+## Tests
+
+Run the standard-library test suite with:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+## Important limitations
+
+This is a local operations MVP, not a production-ready accounting or customer-record system. It binds to the local computer only and has no user accounts, cloud sync, automatic backups, payment processing, invoicing, tax/accounting integrations, or production deployment configuration. Keep a separate backup of important business records. Pipeline values are estimates, and cash-flow totals are not accounting, tax, or financial advice.
