@@ -1,130 +1,137 @@
 from __future__ import annotations
 
-import inspect
-import struct
+import math
 import threading
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, ParamSpec, TypeVar
+from inspect import Parameter, Signature, signature
+from typing import Any, NamedTuple, ParamSpec, TypeVar
 
 P = ParamSpec("P")
 R = TypeVar("R")
-CacheInfo = namedtuple("CacheInfo", ["hits", "misses", "maxsize", "currsize"])
-_UNCACHEABLE = object()
 
 
-def _freeze(value: Any, seen: set[int] | None = None) -> Any:
-    """Convert nested Python data into a hashable, stable representation."""
-    value_type = type(value)
-    if value is None or value_type in (str, bytes, bool, int):
-        return (value_type, value)
-    if value_type is float:
-        return (float, struct.pack(">d", value))
-    if value_type is complex:
-        return (complex, struct.pack(">dd", value.real, value.imag))
-    if value_type in (list, tuple):
-        return _freeze_sequence(value, seen)
-    if value_type is dict:
-        active = seen if seen is not None else set()
+class CacheInfo(NamedTuple):
+    hits: int
+    misses: int
+    maxsize: int
+    currsize: int
+
+
+def _freeze_float(value: float) -> tuple[type, str, float]:
+    """Encode float values while preserving signed zero and NaN/Infinity signs."""
+    if math.isnan(value):
+        return (float, "nan", math.copysign(1.0, value))
+    if math.isinf(value):
+        return (float, "inf", math.copysign(1.0, value))
+    return (float, value.hex(), 0.0)
+
+
+def _freeze(value: Any, active: set[int] | None = None) -> Any:
+    """Create a hashable, type-sensitive key, or raise TypeError if unsupported."""
+    if value is None:
+        return (type(None),)
+    if type(value) is bool:
+        return (bool, value)
+    if type(value) is int:
+        return (int, value)
+    if type(value) is float:
+        return _freeze_float(value)
+    if type(value) is complex:
+        return (complex, _freeze_float(value.real), _freeze_float(value.imag))
+    if type(value) is str or type(value) is bytes:
+        return (type(value), value)
+
+    if active is None:
+        active = set()
+    if isinstance(value, (tuple, list, dict, set, frozenset)):
         identity = id(value)
         if identity in active:
-            return _UNCACHEABLE
+            raise TypeError("recursive values cannot be memoized")
         active.add(identity)
         try:
-            items = tuple(
-                (_freeze(key, active), _freeze(item, active))
-                for key, item in value.items()
-            )
+            if isinstance(value, dict):
+                contents = tuple(
+                    (_freeze(key, active), _freeze(item, active))
+                    for key, item in value.items()
+                )
+            else:
+                contents = tuple(_freeze(item, active) for item in value)
         finally:
             active.remove(identity)
-        if any(key is _UNCACHEABLE or item is _UNCACHEABLE for key, item in items):
-            return _UNCACHEABLE
-        return (dict, items)
-    if value_type in (set, frozenset):
-        active = seen if seen is not None else set()
-        identity = id(value)
-        if identity in active:
-            return _UNCACHEABLE
-        active.add(identity)
-        try:
-            items = tuple(_freeze(item, active) for item in value)
-        finally:
-            active.remove(identity)
-        if any(item is _UNCACHEABLE for item in items):
-            return _UNCACHEABLE
-        items = frozenset(items)
-        return (value_type, items)
+        return (type(value), contents)
+
     try:
         hash(value)
     except TypeError:
-        return _UNCACHEABLE
-    return (value_type, value)
+        raise
+    return (type(value), value)
 
 
-def _freeze_sequence(value: list[Any] | tuple[Any, ...], seen: set[int] | None) -> Any:
-    active = seen if seen is not None else set()
-    identity = id(value)
-    if identity in active:
-        return _UNCACHEABLE
-    active.add(identity)
-    try:
-        items = tuple(_freeze(item, active) for item in value)
-    finally:
-        active.remove(identity)
-    if any(item is _UNCACHEABLE for item in items):
-        return _UNCACHEABLE
-    return (type(value), items)
+def _make_key(
+    func_signature: Signature | None,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> Any:
+    if func_signature is None:
+        return (
+            tuple(_freeze(value) for value in args),
+            tuple((name, _freeze(value)) for name, value in kwargs.items()),
+        )
+
+    bound = func_signature.bind(*args, **kwargs)
+    bound.apply_defaults()
+    values = []
+    for name, parameter in func_signature.parameters.items():
+        value = bound.arguments[name]
+        if parameter.kind is Parameter.VAR_KEYWORD:
+            frozen = tuple((key, _freeze(item)) for key, item in value.items())
+        else:
+            frozen = _freeze(value)
+        values.append((name, frozen))
+    return tuple(values)
 
 
 def memoize(max_size: int = 256) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Cache results for pure, repeated function calls with LRU eviction."""
     if isinstance(max_size, bool) or not isinstance(max_size, int) or max_size < 1:
-        raise ValueError("max_size must be at least 1")
+        raise ValueError("max_size must be a positive integer")
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
         cache: OrderedDict[tuple[Any, ...], R] = OrderedDict()
         lock = threading.RLock()
+        try:
+            func_signature = signature(func)
+        except (TypeError, ValueError):
+            func_signature = None
         hits = 0
         misses = 0
-        try:
-            signature = inspect.signature(func)
-        except (TypeError, ValueError):
-            signature = None
 
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             nonlocal hits, misses
-            if signature is not None:
-                bound = signature.bind(*args, **kwargs)
-                bound.apply_defaults()
-                frozen_arguments = tuple(
-                    (name, _freeze(value)) for name, value in bound.arguments.items()
-                )
-                if any(value is _UNCACHEABLE for _, value in frozen_arguments):
-                    return func(*args, **kwargs)
-                key = frozen_arguments
-            else:
-                frozen_args = _freeze(args)
-                normalized_kwargs = tuple(kwargs.items())
-                frozen_kwargs = _freeze(normalized_kwargs)
-                if frozen_args is _UNCACHEABLE or frozen_kwargs is _UNCACHEABLE:
-                    return func(*args, **kwargs)
-                key = (frozen_args, frozen_kwargs)
+            try:
+                key = _make_key(func_signature, args, kwargs)
+                hash(key)
+            except TypeError:
+                key = None
 
             with lock:
-                if key in cache:
+                if key is not None and key in cache:
                     cache.move_to_end(key)
                     hits += 1
                     return cache[key]
                 misses += 1
 
             value = func(*args, **kwargs)
-            with lock:
-                if key not in cache and len(cache) >= max_size:
-                    cache.popitem(last=False)
-                cache[key] = value
-                cache.move_to_end(key)
+            if key is not None:
+                with lock:
+                    if key not in cache:
+                        if len(cache) >= max_size:
+                            cache.popitem(last=False)
+                        cache[key] = value
+                        cache.move_to_end(key)
             return value
 
         def clear() -> None:
@@ -136,9 +143,7 @@ def memoize(max_size: int = 256) -> Callable[[Callable[P, R]], Callable[P, R]]:
 
         def cache_info() -> CacheInfo:
             with lock:
-                return CacheInfo(
-                    hits=hits, misses=misses, maxsize=max_size, currsize=len(cache)
-                )
+                return CacheInfo(hits, misses, max_size, len(cache))
 
         wrapper.clear = clear  # type: ignore[attr-defined]
         wrapper.cache_clear = clear  # type: ignore[attr-defined]

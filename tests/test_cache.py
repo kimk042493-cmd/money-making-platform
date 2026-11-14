@@ -18,7 +18,7 @@ class MemoizeTests(unittest.TestCase):
         self.assertEqual(compute_total(3, scale=2), 6)
         self.assertEqual(calls, 1)
 
-    def test_memoize_clears_when_cache_is_full(self):
+    def test_memoize_retains_recent_value_when_cache_is_full(self):
         calls = 0
 
         @memoize(max_size=2)
@@ -31,7 +31,9 @@ class MemoizeTests(unittest.TestCase):
         self.assertEqual(compute(2), 20)
         self.assertEqual(compute(3), 30)
         self.assertEqual(compute(3), 30)
-        self.assertGreater(calls, 2)
+        self.assertEqual(calls, 3)
+        self.assertEqual(compute.cache_info().currsize, 2)
+        self.assertEqual(compute.cache_info().hits, 1)
 
     def test_memoize_evicts_least_recently_used_entry(self):
         calls = 0
@@ -100,6 +102,29 @@ class MemoizeTests(unittest.TestCase):
         self.assertEqual(signs(complex(0.0, -0.0)), (1.0, -1.0))
         self.assertEqual(calls, 5)
 
+    def test_memoize_distinguishes_signed_nan_and_infinity(self):
+        calls = 0
+
+        @memoize(max_size=8)
+        def signs(value):
+            nonlocal calls
+            calls += 1
+            if isinstance(value, complex):
+                return (
+                    math.copysign(1, value.real),
+                    math.copysign(1, value.imag),
+                )
+            return math.copysign(1, value)
+
+        self.assertEqual(signs(float("nan")), 1.0)
+        self.assertEqual(signs(float("-nan")), -1.0)
+        self.assertEqual(signs(float("inf")), 1.0)
+        self.assertEqual(signs(float("-inf")), -1.0)
+        self.assertEqual(signs(complex(float("nan"), 0.0)), (1.0, 1.0))
+        self.assertEqual(signs(complex(float("-nan"), 0.0)), (-1.0, 1.0))
+        self.assertEqual(signs(complex(0.0, float("-inf"))), (1.0, -1.0))
+        self.assertEqual(calls, 7)
+
     def test_memoize_handles_mixed_dictionary_keys(self):
         calls = 0
 
@@ -125,6 +150,33 @@ class MemoizeTests(unittest.TestCase):
 
         self.assertEqual(keys_in_order({"first": 1, "second": 2}), ("first", "second"))
         self.assertEqual(keys_in_order({"second": 2, "first": 1}), ("second", "first"))
+        self.assertEqual(calls, 2)
+
+    def test_memoize_preserves_set_iteration_order(self):
+        class Item:
+            def __init__(self, value):
+                self.value = value
+
+            def __hash__(self):
+                return 1
+
+            def __eq__(self, other):
+                return self is other
+
+        calls = 0
+
+        @memoize(max_size=8)
+        def iteration_order(values):
+            nonlocal calls
+            calls += 1
+            return tuple(item.value for item in values)
+
+        items = [Item(value) for value in range(3)]
+        first = set(items)
+        second = set(reversed(items))
+        self.assertEqual(first, second)
+        self.assertNotEqual(tuple(first), tuple(second))
+        self.assertNotEqual(iteration_order(first), iteration_order(second))
         self.assertEqual(calls, 2)
 
     def test_memoize_preserves_keyword_argument_order(self):
