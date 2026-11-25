@@ -17,6 +17,8 @@ class UserInputError(ValueError):
 
 
 def _required(value: str, label: str, limit: int = 160) -> str:
+    if not isinstance(value, str):
+        raise UserInputError(f"{label} is required.")
     value = value.strip()
     if not value:
         raise UserInputError(f"{label} is required.")
@@ -26,6 +28,8 @@ def _required(value: str, label: str, limit: int = 160) -> str:
 
 
 def _amount_cents(value: str) -> int:
+    if not isinstance(value, str):
+        raise UserInputError("Enter a valid amount.")
     try:
         amount = Decimal(value.strip())
     except (InvalidOperation, AttributeError):
@@ -39,6 +43,8 @@ def _amount_cents(value: str) -> int:
 
 
 def _valid_date(value: str) -> str:
+    if not isinstance(value, str):
+        raise UserInputError("Enter a valid date.")
     try:
         return date.fromisoformat(value.strip()).isoformat()
     except (ValueError, AttributeError):
@@ -134,26 +140,36 @@ class Store:
 
     def totals(self) -> dict[str, int]:
         with self.connect() as db:
-            rows = db.execute(
-                "SELECT kind, COALESCE(SUM(amount_cents), 0) total FROM transactions GROUP BY kind"
-            ).fetchall()
-            result = {"income": 0, "expense": 0}
-            result.update({row["kind"]: row["total"] for row in rows})
-            result["pipeline"] = db.execute(
-                "SELECT COALESCE(SUM(value_cents), 0) FROM leads WHERE status NOT IN ('won','lost')"
-            ).fetchone()[0]
-            result["open_tasks"] = db.execute(
-                "SELECT COUNT(*) FROM tasks WHERE completed=0"
-            ).fetchone()[0]
-            result["net"] = result["income"] - result["expense"]
+            row = db.execute(
+                """
+                SELECT
+                    COALESCE(SUM(CASE WHEN kind = 'income' THEN amount_cents ELSE 0 END), 0) AS income,
+                    COALESCE(SUM(CASE WHEN kind = 'expense' THEN amount_cents ELSE 0 END), 0) AS expense,
+                    (SELECT COALESCE(SUM(value_cents), 0)
+                     FROM leads WHERE status NOT IN ('won', 'lost')) AS pipeline,
+                    (SELECT COUNT(*) FROM tasks WHERE completed = 0) AS open_tasks
+                FROM transactions
+                """
+            ).fetchone()
+            income = row["income"]
+            expense = row["expense"]
+            result = {
+                "income": income,
+                "expense": expense,
+                "pipeline": row["pipeline"],
+                "open_tasks": row["open_tasks"],
+                "net": income - expense,
+            }
         return result
 
     def create_business(self, name: str, description: str, status: str) -> int:
         name = _required(name, "Business name")
+        if not isinstance(description, str):
+            raise UserInputError("Description must be 500 characters or fewer.")
         description = description.strip()
         if len(description) > 500:
             raise UserInputError("Description must be 500 characters or fewer.")
-        if status not in BUSINESS_STATUSES:
+        if not isinstance(status, str) or status not in BUSINESS_STATUSES:
             raise UserInputError("Choose a valid business status.")
         with self.connect() as db:
             cursor = db.execute(
@@ -164,9 +180,11 @@ class Store:
 
     def update_business(self, business_id: int, name: str, description: str, status: str) -> None:
         name = _required(name, "Business name")
+        if not isinstance(description, str):
+            raise UserInputError("Description must be 500 characters or fewer.")
         if len(description.strip()) > 500:
             raise UserInputError("Description must be 500 characters or fewer.")
-        if status not in BUSINESS_STATUSES:
+        if not isinstance(status, str) or status not in BUSINESS_STATUSES:
             raise UserInputError("Choose a valid business status.")
         self._update("UPDATE businesses SET name=?, description=?, status=? WHERE id=?",
                      (name, description.strip(), status, business_id), "Business not found.")
@@ -176,6 +194,8 @@ class Store:
 
     def add_lead(self, business_id: int, name: str, contact: str, value: str) -> int:
         name = _required(name, "Lead name")
+        if not isinstance(contact, str):
+            raise UserInputError("Contact must be 160 characters or fewer.")
         contact = contact.strip()
         if len(contact) > 160:
             raise UserInputError("Contact must be 160 characters or fewer.")
@@ -189,7 +209,7 @@ class Store:
             return cursor.lastrowid
 
     def update_lead_status(self, lead_id: int, status: str) -> None:
-        if status not in LEAD_STATUSES:
+        if not isinstance(status, str) or status not in LEAD_STATUSES:
             raise UserInputError("Choose a valid lead status.")
         self._update("UPDATE leads SET status=? WHERE id=?", (status, lead_id), "Lead not found.")
 
@@ -216,9 +236,11 @@ class Store:
     def add_transaction(
         self, business_id: int, kind: str, amount: str, description: str, transaction_date: str
     ) -> int:
-        if kind not in TRANSACTION_KINDS:
+        if not isinstance(kind, str) or kind not in TRANSACTION_KINDS:
             raise UserInputError("Choose income or expense.")
         cents = _amount_cents(amount)
+        if not isinstance(description, str):
+            raise UserInputError("Description must be 240 characters or fewer.")
         description = description.strip()
         if len(description) > 240:
             raise UserInputError("Description must be 240 characters or fewer.")
