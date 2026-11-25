@@ -90,6 +90,19 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(transactions[0]["description"], "Sale 10")
         self.assertEqual(transactions[-1]["description"], "Sale 3")
 
+    def test_initialize_creates_dashboard_aggregate_indexes(self):
+        with self.store.connect() as db:
+            indexes = {
+                row["name"]
+                for row in db.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'index'"
+                )
+            }
+
+        self.assertIn("leads_status_value", indexes)
+        self.assertIn("tasks_completed", indexes)
+        self.assertIn("transactions_kind_amount", indexes)
+
 
 if __name__ == "__main__":
     unittest.main()

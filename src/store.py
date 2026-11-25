@@ -112,9 +112,13 @@ class Store:
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE INDEX IF NOT EXISTS leads_business_status ON leads(business_id, status);
+                CREATE INDEX IF NOT EXISTS leads_status_value ON leads(status, value_cents);
                 CREATE INDEX IF NOT EXISTS tasks_business_due ON tasks(business_id, completed, due_date);
+                CREATE INDEX IF NOT EXISTS tasks_completed ON tasks(completed);
                 CREATE INDEX IF NOT EXISTS transactions_business_date
                     ON transactions(business_id, transaction_date DESC);
+                CREATE INDEX IF NOT EXISTS transactions_kind_amount
+                    ON transactions(kind, amount_cents);
                 """
             )
 
