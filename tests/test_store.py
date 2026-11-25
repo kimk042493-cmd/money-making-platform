@@ -74,6 +74,22 @@ class StoreTests(unittest.TestCase):
         self.store.delete_business(business_id)
         self.assertEqual(self.store.totals()["income"], 0)
 
+    def test_businesses_load_only_eight_latest_transactions_per_business(self):
+        business_id = self.store.create_business("Cafe", "", "active")
+        for day in range(1, 11):
+            self.store.add_transaction(
+                business_id,
+                "income",
+                "1.00",
+                f"Sale {day}",
+                f"2026-10-{day:02d}",
+            )
+
+        transactions = self.store.businesses()[0]["transactions"]
+        self.assertEqual(len(transactions), 8)
+        self.assertEqual(transactions[0]["description"], "Sale 10")
+        self.assertEqual(transactions[-1]["description"], "Sale 3")
+
 
 if __name__ == "__main__":
     unittest.main()

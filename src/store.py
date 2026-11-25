@@ -132,7 +132,25 @@ class Store:
                 ("tasks", "completed, due_date, id DESC"),
                 ("transactions", "transaction_date DESC, id DESC"),
             ):
-                for row in db.execute(f"SELECT * FROM {table} ORDER BY {order}"):
+                if table == "transactions":
+                    rows = db.execute(
+                        """
+                        SELECT id, business_id, kind, amount_cents, description,
+                               transaction_date, created_at
+                        FROM (
+                            SELECT *,
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY business_id
+                                       ORDER BY transaction_date DESC, id DESC
+                                   ) AS transaction_rank
+                            FROM transactions
+                        )
+                        WHERE transaction_rank <= 8
+                        """
+                    )
+                else:
+                    rows = db.execute(f"SELECT * FROM {table} ORDER BY {order}")
+                for row in rows:
                     grouped[row["business_id"]][table].append(dict(row))
             for business in businesses:
                 business.update(grouped[business["id"]])
